@@ -69,6 +69,7 @@ implementation
 {$R *.dfm}
 {$Optimization Off}
 
+//генерирует случайный приоритет
 function generateRandomPrority: TPrioritetProcess;
 begin
   randomize;
@@ -248,41 +249,57 @@ begin
   end;
 end;
 
+//моделирование диспетчера процессов
 procedure TForm1.Timer1Timer(Sender: TObject);
 var
   PickedProcessDescriptor: PDescriptor;
 begin
+  //если процессор простаивает
   if Processor.State = spEmpty then
   begin
+    //если очередь готовых процессов пуста
     if ReadyProcesses.IsEmpty then
     begin
+      //то ничего не делаем
       Exit;
     end;
 
+    //берем процесс из очереди готовых процессов
     PickedProcessDescriptor :=  ReadyProcesses.PickProcess();
+
+    //восстанавливаем контекст выбранного процесса
     CurrentProcessContext := ContextProcessByID(PickedProcessDescriptor^.PID);
 
+    //помечаем, что процесс выполняется
     PickedProcessDescriptor.State := spRun;
 
+    //помечаем, что процессор находится в работе
     Processor.Run := PickedProcessDescriptor;
     Processor.State := spBusy;
 
+    //инициализируем переменную с оставшимся временем работы процесса
     ProcessorTimeUnitLeft := PickedProcessDescriptor^.Kvant;
   end;
 
+  //уменьшаем время, которое осталось выполняться процессу на единицу
   ProcessorTimeUnitLeft := ProcessorTimeUnitLeft - 1;
 
+  //если команду, которую нужно сейчас выполнить команда ввода/вывода
   if CurrentProcessContext^.Command = cIO then
   begin
+    //если устройство ввода/вывода не захвачено другими процессами
     if IsIODeviceAvailable then
     begin
+      //захватываем его
       IsIODeviceAvailable := false;
       CurrentProcessContext^.IODeviceCapturedByMe := true;
       WriteToLog(Format('%s захватил устройство ввода/вывода', [CurrentProcessContext^.Name]));
     end else if not CurrentProcessContext^.IODeviceCapturedByMe then
     begin
+      //иначе проверяем не кончилось ли время работы
       if ProcessorTimeUnitLeft = 0 then
       begin
+        //снимаем процесс с выполнения если кончилось
         ReleaseProcessor;
         ReadyProcesses.Add(Processor.Run);
         WriteToLog(Format('%s помещен в очередь готовых', [CurrentProcessContext^.Name]));
@@ -292,14 +309,19 @@ begin
     end
   end;
 
+  //увеличиваем кол-во выполненных команд на единицу
   CurrentProcessContext^.CurrentRun := CurrentProcessContext^.CurrentRun + 1;
 
+  //если процесс полность выполнился
   if IsCurrentProcessExecuted then
   begin
+    //освобождаем процессор
     ReleaseProcessor;                       
 
+    //если этим процессом захвачено устройство ввода/вывода
     if CurrentProcessContext^.IODeviceCapturedByMe then
     begin
+      //то освобождаем его
       IsIODeviceAvailable := true;
       CurrentProcessContext^.IODeviceCapturedByMe := false;
       WriteToLog(Format('%s освободил устройство ввода/вывода', [CurrentProcessContext^.Name]));
@@ -308,44 +330,56 @@ begin
   end
   else
   begin
+    //если группа команд выполнена
     if IsCurrentCommandGroupExecuted then
     begin
+      //переходим на следующую группу
       SwitchToNextCommandGroup;
 
+      //если этим процессом захвачено устройства ввода/вывода и следующая группа
+      //команд - команды не ввода/вывода
       if (CurrentProcessContext^.IODeviceCapturedByMe)
         and (CurrentProcessContext^.Command <> cIO) then
       begin
+        //то освобождаем устройство
         IsIODeviceAvailable := true;
         CurrentProcessContext^.IODeviceCapturedByMe := false;
         WriteToLog(Format('%s освободил устройство ввода/вывода', [CurrentProcessContext^.Name]));
       end;
     end;
 
+    //если время работы процесса кончилось
     if ProcessorTimeUnitLeft = 0 then
     begin
+      //снимаем процесс с выполнения
       ReleaseProcessor;
       ReadyProcesses.Add(Processor.Run);
       WriteToLog(Format('%s помещен в очередь готовых', [CurrentProcessContext^.Name]));
     end;
   end;
-  
+
+  //обновляем интерфейс
   RefreshUI(Form1);
 end;
 
+//проверяем выполнился ли процесс процесс
 function IsCurrentProcessExecuted: boolean;
 var
   NextCommand: TCommand;
 begin
+  //получаем тим комманд следующей группы
   NextCommand := ParseCommand(ListBox[Processor.Run^.PID].Items[CurrentProcessContext^.CommandLine + 1]);
   Result := (NextCommand = cNone)
     and (CurrentProcessContext^.CountRun = CurrentProcessContext^.CurrentRun);
 end;
 
+//проверяет выполнилась ли текущая группа команд
 function IsCurrentCommandGroupExecuted: boolean;
 begin
   Result := CurrentProcessContext^.CountRun = CurrentProcessContext^.CurrentRun;
 end;
 
+//настраивает контекст на следующую группу команд
 procedure SwitchToNextCommandGroup();
 begin
   CurrentProcessContext^.CommandLine := CurrentProcessContext^.CommandLine + 1;
@@ -354,12 +388,14 @@ begin
   CurrentProcessContext^.CurrentRun := 0;
 end;
 
+//освобождает процессор
 procedure ReleaseProcessor();
 begin
   Processor.State := spEmpty;
   Processor.Run^.State := spReady;
 end;
 
+//обновляет интерфейс
 procedure RefreshUI(Form: TForm1);
 var
   CurrentDescriptor: PDescriptor;

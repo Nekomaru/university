@@ -50,6 +50,8 @@ type
     CountRun: Integer;                    //Сколько надо выполнять команду
     CurrentRun: Integer;                  //Счётчик выполнения команды
     Memory: Integer;                      //Требуемое для процесса количество памяти
+    IODeviceCapturedByMe: Boolean;        //Показывает захвачено ли устройство ввода/вывода
+                                          //именно этим потоком
   end;
 
   //Тип-запись: Процесс
@@ -72,16 +74,15 @@ type
     State: TStateProcessor;                      //Состояние процессора
   end;
 
+  //Очеред готовых процессов
 	TReadyQueue = class(TList)
 	public
+    //достает дескриптор процесса
 		function PickProcess: PDescriptor;
+    //проверяет пустая ли очередь
 		function IsEmpty: boolean;
 	end;
 
-  //Процедура помещения в стек
-  procedure In_Stack(var First: PDescriptorStack; AValue: PDescriptor);
-  //Процедура извлечения из стека
-  procedure Out_Stack(var First: PDescriptorStack; Var processDescriptor: PDescriptor);
   //Преобразования состояния процесса в строку текста
   function StateToStr(AState: TStateProcess): String;
   //Преобразования состояния процессора в строку текста
@@ -111,17 +112,26 @@ implementation
 		CurrentDescriptorWithMaxPriority: PDescriptor;
 		i: integer;
 	begin
+    //изначально считаем первый дескриптор в очереди дескриптором с максимальным
+    //приоритетом
 		CurrentDescriptorWithMaxPriority := Self[0];
+
+    //перебираем все оставшиеся дескрипторы
 		for i := 1 to Count - 1 do
 		begin
 			CurrentDescriptor := Self[i];
+      //если приоритет текущего процесса выше приоритета процесса с максимальным приоритетом
 			if CurrentDescriptor^.Prioritet > CurrentDescriptorWithMaxPriority^.Prioritet then
 			begin
+        //то сохраняем текущий процесс как процесс с максимальным приоритетом
 				CurrentDescriptorWithMaxPriority := CurrentDescriptor;
 			end;
 		end;
-		
+
+    //удаляем дескриптор процесса с максимальным приоритетом из очереди
     Remove(CurrentDescriptorWithMaxPriority);
+
+    //возвращаем дескриптор процесса с максимальным приоритетом
 		Result := CurrentDescriptorWithMaxPriority;
 	end;
 	
@@ -129,66 +139,6 @@ implementation
 	begin
 		Result := Count = 0;
 	end;
-	
-  procedure In_Stack(var First: PDescriptorStack; AValue: PDescriptor);
-  var
-    Temp: PDescriptorStack;
-  begin
-    New(Temp);
-    Temp^.Descriptor := AValue;
-    Temp^.Next := First;
-    First := Temp; 
-  end;
-
-  procedure Out_Stack(var First: PDescriptorStack; Var processDescriptor: PDescriptor);
-  var
-    Temp: PDescriptorStack;
-    currentDescriptorListElement: PDescriptorStack;
-    preDescriptorListElement: PDescriptorStack;
-    curDescriptListElWithMaxPrior: PDescriptorStack;
-    preDescriptListElWithMaxPrior: PDescriptorStack;
-    preProcessDescriptor: PDescriptor;
-    b: boolean;
-  begin
-
-    if First^.Next = nil then
-    begin
-      processDescriptor := First^.Descriptor;
-      First := nil;
-      exit;
-    end;
-
-    currentDescriptorListElement := First;
-    preDescriptorListElement := First;
-    curDescriptListElWithMaxPrior := First;
-    preDescriptListElWithMaxPrior := nil;
-    while currentDescriptorListElement^.Next <> nil do
-    begin
-      currentDescriptorListElement := currentDescriptorListElement^.Next;
-      if currentDescriptorListElement^.Descriptor^.Prioritet >
-        curDescriptListElWithMaxPrior^.Descriptor^.Prioritet then
-      begin
-        curDescriptListElWithMaxPrior := currentDescriptorListElement;
-        preDescriptListElWithMaxPrior := preDescriptorListElement;
-      end;
-        preDescriptorListElement := preDescriptorListElement^.Next;
-    end;
-    if preDescriptListElWithMaxPrior <> nil then
-    begin
-      preDescriptListElWithMaxPrior^.Next := curDescriptListElWithMaxPrior^.Next
-    end
-    else
-    begin
-      First := curDescriptListElWithMaxPrior^.Next
-    end;
-    curDescriptListElWithMaxPrior^.Next := nil;
-    processDescriptor := curDescriptListElWithMaxPrior^.Descriptor;
-    b := true;
-{    Temp := First;
-    First := First^.Next;
-    AValue := Temp^.Descriptor;
-    Dispose(Temp);}
-  end;
 
   function ParseInt(Text: String): Integer;
   var
