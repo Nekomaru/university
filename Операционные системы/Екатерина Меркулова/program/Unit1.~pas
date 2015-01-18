@@ -388,14 +388,12 @@ begin
   CurrentProcessContext^.CurrentRun := 0;
 end;
 
-//освобождает процессор
 procedure ReleaseProcessor();
 begin
   Processor.State := spEmpty;
   Processor.Run^.State := spReady;
 end;
 
-//обновляет интерфейс
 procedure RefreshUI(Form: TForm1);
 var
   CurrentDescriptor: PDescriptor;

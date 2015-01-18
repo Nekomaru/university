@@ -107,12 +107,32 @@ type
 implementation
 
 	function TReadyQueue.PickProcess: PDescriptor;
-  var
-    PickedDescriptor: PDescriptor;
+	var
+		CurrentDescriptor: PDescriptor;
+		CurrentDescriptorWithMaxPriority: PDescriptor;
+		i: integer;
 	begin
-    PickedDescriptor := First;
-    Delete(PickedDescriptor);
-    Result := PickedDescriptor;
+    //изначально считаем первый дескриптор в очереди дескриптором с максимальным
+    //приоритетом
+		CurrentDescriptorWithMaxPriority := Self[0];
+
+    //перебираем все оставшиеся дескрипторы
+		for i := 1 to Count - 1 do
+		begin
+			CurrentDescriptor := Self[i];
+      //если приоритет текущего процесса выше приоритета процесса с максимальным приоритетом
+			if CurrentDescriptor^.Prioritet > CurrentDescriptorWithMaxPriority^.Prioritet then
+			begin
+        //то сохраняем текущий процесс как процесс с максимальным приоритетом
+				CurrentDescriptorWithMaxPriority := CurrentDescriptor;
+			end;
+		end;
+
+    //удаляем дескриптор процесса с максимальным приоритетом из очереди
+    Remove(CurrentDescriptorWithMaxPriority);
+
+    //возвращаем дескриптор процесса с максимальным приоритетом
+		Result := CurrentDescriptorWithMaxPriority;
 	end;
 	
 	function TReadyQueue.IsEmpty: boolean;
