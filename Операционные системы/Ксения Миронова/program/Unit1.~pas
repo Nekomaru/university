@@ -17,10 +17,6 @@ type
     Label1: TLabel;
     SpeedButton1: TSpeedButton;
     SpeedButton2: TSpeedButton;
-    Panel2: TPanel;
-    Label2: TLabel;
-    SpeedButton3: TSpeedButton;
-    SpeedButton4: TSpeedButton;
     ListBox1: TListBox;
     Label3: TLabel;
     ListBox2: TListBox;
@@ -36,8 +32,6 @@ type
     procedure WriteToLog(Text: String);
     procedure SpeedButton1Click(Sender: TObject);
     procedure SpeedButton2Click(Sender: TObject);
-    procedure SpeedButton3Click(Sender: TObject);
-    procedure SpeedButton4Click(Sender: TObject);
     procedure Timer1Timer(Sender: TObject);
     function ContextProcessByID(ID: Integer): PContext;
   private
@@ -53,7 +47,7 @@ var
   Form1: TForm1;
   TabSheet : array [0..9] of TTabSheet;
   ListBox: array [0..9] of TListBox;
-  ALabel: array [0..3, 0..9] of TLabel;
+  ALabel: array [0..2, 0..9] of TLabel;
   Process: array [0..9] of TProcess;        //Массив процессов
   Processor: TProcessor;                    //Модель процессора
   ReadyProcesses: TReadyQueue;              //Очередь готовых процессов
@@ -129,19 +123,14 @@ begin
     ALabel[1,PageControl1.PageCount-1].Left := 5;
     ALabel[1,PageControl1.PageCount-1].Parent := TabSheet[PageControl1.PageCount-1];
     ALabel[2,PageControl1.PageCount-1] := TLabel.Create(Self);
-    ALabel[2,PageControl1.PageCount-1].Caption := 'Приоритет = ';
+    ALabel[2,PageControl1.PageCount-1].Caption := 'Текущая команда = ';
     ALabel[2,PageControl1.PageCount-1].Top := 35;
     ALabel[2,PageControl1.PageCount-1].Left := 5;
     ALabel[2,PageControl1.PageCount-1].Parent := TabSheet[PageControl1.PageCount-1];
-    ALabel[3,PageControl1.PageCount-1] := TLabel.Create(Self);
-    ALabel[3,PageControl1.PageCount-1].Caption := 'Текущая команда = ';
-    ALabel[3,PageControl1.PageCount-1].Top := 50;
-    ALabel[3,PageControl1.PageCount-1].Left := 5;
-    ALabel[3,PageControl1.PageCount-1].Parent := TabSheet[PageControl1.PageCount-1];
     PageControl1.ActivePageIndex := PageControl1.PageCount-1;
     PageControl1.ActivePage.Align := alClient;
     ListBox[PageControl1.PageCount-1].Align  := alBottom;
-    ListBox[PageControl1.PageCount-1].Height := trunc(PageControl1.ActivePage.Height-70);
+    ListBox[PageControl1.PageCount-1].Height := trunc(PageControl1.ActivePage.Height-55);
     ListBox[PageControl1.PageCount-1].Items.LoadFromFile(OpenDialog1.FileName);
     ListBox[PageControl1.PageCount-1].ItemIndex := -1;
     //Создание процесса
@@ -152,8 +141,7 @@ begin
                                                         ParseCommand(ListBox[PageControl1.PageCount-1].Items[1]));
     ALabel[0,PageControl1.PageCount-1].Caption := 'Квант = ' + IntToStr(Process[PageControl1.PageCount-1].Descriptor.Kvant);
     ALabel[1,PageControl1.PageCount-1].Caption := 'Состояние = ' + StateToStr(Process[PageControl1.PageCount-1].Descriptor.State);
-    ALabel[2,PageControl1.PageCount-1].Caption := 'Приоритет = ' + PriorToStr(Process[PageControl1.PageCount-1].Descriptor.Prioritet);;
-    ALabel[3,PageControl1.PageCount-1].Caption := 'Текущая команда = ' + CommandToStr(Process[PageControl1.PageCount-1].Context^.Command);
+    ALabel[2,PageControl1.PageCount-1].Caption := 'Текущая команда = ' + CommandToStr(Process[PageControl1.PageCount-1].Context^.Command);
     WriteToLog('Запущен новый процесс с именем ' + Process[PageControl1.PageCount-1].Context^.Name +
                ' (Квант = ' + IntToStr(Process[PageControl1.PageCount-1].Descriptor.Kvant) +
                '; Состояние = ' + StateToStr(Process[PageControl1.PageCount-1].Descriptor.State) +
@@ -210,34 +198,6 @@ begin
   end
   else begin
     ShowMessage('Увеличение кванта процессорного времени невозможно!');
-  end;
-end;
-
-//Уменьшение приоритета процеса, если это возможно
-procedure TForm1.SpeedButton3Click(Sender: TObject);
-begin
-  if CheckPriorDown(Process[PageControl1.ActivePageIndex].Descriptor.Prioritet) then begin
-    Process[PageControl1.ActivePageIndex].Descriptor.Prioritet := TPrioritetProcess(Byte(Process[PageControl1.ActivePageIndex].Descriptor.Prioritet) - 1);
-    ALabel[2,PageControl1.ActivePageIndex].Caption := 'Приоритет = ' + PriorToStr(Process[PageControl1.ActivePageIndex].Descriptor.Prioritet);
-    WriteToLog('Процессу ' + Process[PageControl1.ActivePageIndex].Context^.Name +
-               ' уменьшен приоритет до ' + PriorToStr(Process[PageControl1.ActivePageIndex].Descriptor.Prioritet));
-  end
-  else begin
-    ShowMessage('Уменьшение приоритета невозможно!');
-  end;
-end;
-
-//Увеличение приоритета процеса, если это возможно
-procedure TForm1.SpeedButton4Click(Sender: TObject);
-begin
-  if CheckPriorUp(Process[PageControl1.ActivePageIndex].Descriptor.Prioritet) then begin
-    Process[PageControl1.ActivePageIndex].Descriptor.Prioritet := TPrioritetProcess(Byte(Process[PageControl1.ActivePageIndex].Descriptor.Prioritet) + 1);
-    ALabel[2,PageControl1.ActivePageIndex].Caption := 'Приоритет = ' + PriorToStr(Process[PageControl1.ActivePageIndex].Descriptor.Prioritet);
-    WriteToLog('Процессу ' + Process[PageControl1.ActivePageIndex].Context^.Name +
-               ' увеличен приоритет до ' + PriorToStr(Process[PageControl1.ActivePageIndex].Descriptor.Prioritet));
-  end
-  else begin
-    ShowMessage('Увеличение приоритета невозможно!');
   end;
 end;
 
@@ -388,6 +348,7 @@ begin
   Processor.Run^.State := spReady;
 end;
 
+//делает все ожидающие процессы готовыми
 procedure MakeWaitProcessesReady;
 var
   CurrentWaitProcessDescriptor: PDescriptor;

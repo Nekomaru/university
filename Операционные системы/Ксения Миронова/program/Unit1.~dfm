@@ -1,6 +1,6 @@
 object Form1: TForm1
-  Left = 513
-  Top = 151
+  Left = 497
+  Top = 148
   Width = 696
   Height = 586
   Caption = #1052#1086#1076#1077#1083#1080#1088#1086#1074#1072#1085#1080#1077' '#1072#1083#1075#1086#1088#1080#1090#1084#1086#1074' '#1091#1087#1088#1072#1074#1083#1077#1085#1080#1103' '#1087#1088#1086#1094#1077#1089#1089#1072#1084#1080
@@ -63,7 +63,7 @@ object Form1: TForm1
       Caption = #1054#1095#1077#1088#1077#1076#1100' '#1086#1078#1080#1076#1072#1102#1097#1080#1093
     end
     object Panel1: TPanel
-      Left = 8
+      Left = 80
       Top = 8
       Width = 113
       Height = 41
@@ -92,43 +92,13 @@ object Form1: TForm1
         OnClick = SpeedButton2Click
       end
     end
-    object Panel2: TPanel
-      Left = 136
-      Top = 8
-      Width = 121
-      Height = 41
-      TabOrder = 1
-      object Label2: TLabel
-        Left = 32
-        Top = 16
-        Width = 54
-        Height = 13
-        Caption = #1055#1088#1080#1086#1088#1080#1090#1077#1090
-      end
-      object SpeedButton3: TSpeedButton
-        Left = 8
-        Top = 8
-        Width = 23
-        Height = 22
-        Caption = '-1'
-        OnClick = SpeedButton3Click
-      end
-      object SpeedButton4: TSpeedButton
-        Left = 88
-        Top = 8
-        Width = 23
-        Height = 22
-        Caption = '+1'
-        OnClick = SpeedButton4Click
-      end
-    end
     object ListBox1: TListBox
       Left = 8
       Top = 144
       Width = 121
       Height = 201
       ItemHeight = 13
-      TabOrder = 2
+      TabOrder = 1
     end
     object ListBox2: TListBox
       Left = 144
@@ -136,7 +106,7 @@ object Form1: TForm1
       Width = 121
       Height = 201
       ItemHeight = 13
-      TabOrder = 3
+      TabOrder = 2
     end
     object GroupBox1: TGroupBox
       Left = 16
@@ -144,7 +114,7 @@ object Form1: TForm1
       Width = 241
       Height = 73
       Caption = #1055#1088#1086#1094#1077#1089#1089#1086#1088
-      TabOrder = 4
+      TabOrder = 3
       object Label5: TLabel
         Left = 16
         Top = 16
