@@ -40,8 +40,6 @@ type
     procedure SpeedButton4Click(Sender: TObject);
     procedure Timer1Timer(Sender: TObject);
     function ContextProcessByID(ID: Integer): PContext;
-    procedure Timer2Timer(Sender: TObject);
-    procedure FormCreate(Sender: TObject);
   private
     { Private declarations }
   public
@@ -58,43 +56,56 @@ var
   ALabel: array [0..3, 0..9] of TLabel;
   Process: array [0..9] of TProcess;        //Массив процессов
   Processor: TProcessor;                    //Модель процессора
-  IODevice: TProcessor;                     //Модель устройства ввода/вывода
-  Readys: PDescriptorStack;                 //Ссылка на очередь готовых
-  Waits: PDescriptorStack;                  //Ссылка на очередь ожидающих
-  StateReadys, StateWaits: TStateStack;     //Состояние очередей
+  ReadyProcesses: TReadyQueue;
 
-function isProcessWithHighesPriorityExists(Priority: TPrioritetProcess): boolean;
-procedure refreshRredysList(ListBox: TListBox);
-procedure refreshWaitsList(ListBox: TListBox);
-procedure ReleaseProcessorIfNeeded();
-procedure SwitchToNextCommandGroupIfNeeded();
-procedure RefreshUI(Form: TForm1);
+procedure ReleaseProcessor();
 procedure SwitchToNextCommandGroup();
+procedure RefreshUI(Form: TForm1);
+function IsCurrentProcessExecuted: boolean;
+function IsCurrentCommandGroupExecuted: boolean;
 
 implementation
 
 {$R *.dfm}
+{$Optimization Off}
+
+function generateRandomPrority: TPrioritetProcess;
+begin
+  randomize;
+  case Random(5) of
+    0: Result := ppLowest;
+    1: Result := ppLow;
+    2: Result := ppNormal;
+    3: Result := ppHigh;
+    4: Result := ppHighest;
+  end;
+end;
 
 //Создание процесса:
 //ID - идентификационный номер процесса
 //Name - название процесса
 //Memory - количество памяти/, необходимое процессу
-function CreateProccess(ID: Integer; Name: String; Memory: Integer; FirstCommandGroupTimeUnitCount: Integer): TProcess;
+function CreateProccess(ID: Integer;
+    Name: String;
+    Memory: Integer;
+    FirstCommandGroupTimeUnitCount: Integer;
+    FirstCommand: TCommand): TProcess;
 begin
   with Result.Descriptor do begin
     PID := ID;
     Kvant := 2;
     State := spNone;
-    Prioritet := ppNormal;
+    Prioritet := generateRandomPrority;
   end;
   New(Result.Context);
   Result.Context^.PID := ID;
-  Result.Context^.CommandLine := 0;
+  Result.Context^.CommandLine := 1;
   Result.Context^.CountRun := FirstCommandGroupTimeUnitCount;
-  Result.Context^.Command := cMEMORY;
+  Result.Context^.Command := FirstCommand;
   Result.Context^.CurrentRun := 0;
   Result.Context^.Name := Name;
   Result.Context^.Memory := Memory;
+  Result.Context^.IODeviceCapturedByMe := false;
 end;
 
 //Запись в лог
@@ -147,7 +158,8 @@ begin
     Process[PageControl1.PageCount-1] := CreateProccess(PageControl1.PageCount-1,
                                                         TabSheet[PageControl1.PageCount-1].Caption,
                                                         ParseInt(ListBox[PageControl1.PageCount-1].Items[0]),
-                                                        ParseInt(ListBox[PageControl1.PageCount-1].Items[1]));
+                                                        ParseInt(ListBox[PageControl1.PageCount-1].Items[1]),
+                                                        ParseCommand(ListBox[PageControl1.PageCount-1].Items[1]));
     ALabel[0,PageControl1.PageCount-1].Caption := 'Квант = ' + IntToStr(Process[PageControl1.PageCount-1].Descriptor.Kvant);
     ALabel[1,PageControl1.PageCount-1].Caption := 'Состояние = ' + StateToStr(Process[PageControl1.PageCount-1].Descriptor.State);
     ALabel[2,PageControl1.PageCount-1].Caption := 'Приоритет = ' + PriorToStr(Process[PageControl1.PageCount-1].Descriptor.Prioritet);;
@@ -158,14 +170,10 @@ begin
                '; Приоритет = ' + PriorToStr(Process[PageControl1.PageCount-1].Descriptor.Prioritet) + ')');
     Panel3.Enabled := True;
     //Помещаем процесс в стек готовых
-    In_Stack(Readys, @Process[PageControl1.ActivePageIndex].Descriptor);
-    StateReadys := ssFully;
-    //ListBox1.Items.Add(Process[PageControl1.ActivePageIndex].Context^.Name);
-    refreshRredysList(ListBox1);
+    ReadyProcesses.Add(@Process[PageControl1.ActivePageIndex].Descriptor);
     WriteToLog('Процесс ' + Process[PageControl1.ActivePageIndex].Context^.Name + ' помещен в очередь готовых');
     //Включаем моделирование процеесора и устройств ввода/вывода
     if not Timer1.Enabled then Timer1.Enabled := True;
-    if not Timer2.Enabled then Timer2.Enabled := True;
   end;
 end;
 
@@ -178,14 +186,10 @@ begin
   Label5.Caption := 'Состояние = ' + StateProcessorToStr(Processor.State);
   Label6.Caption := 'Процесс = ';
   WriteToLog('Модель процессора подготовлена');
-  StateReadys := ssEmpty;
-  WriteToLog('Очередь готовых подготовлена');
-  StateWaits := ssEmpty;
-  WriteToLog('Очередь ожидающих подготовлена');
-  GetMem(IODevice.Run, SizeOf(TDescriptor));
-  IODevice.State := spEmpty;
-  WriteToLog('Модель устройства ввода/вывода подготовлена');
+
   IsIODeviceAvailable := true;
+  ReadyProcesses := TReadyQueue.Create;
+  WriteToLog('Очередь готовых процессов создана');
 end;
 
 //Уменьшение кванта процессорного времени, если это возможно
@@ -250,13 +254,13 @@ var
 begin
   if Processor.State = spEmpty then
   begin
-    Out_Stack(Readys, PickedProcessDescriptor);
-    CurrentProcessContext := ContextProcessByID(PickedProcessDescriptor^.PID);
-
-    if CurrentProcessContext.Command = cIO then
+    if ReadyProcesses.IsEmpty then
     begin
-      IsIODeviceAvailable := false;
+      Exit;
     end;
+
+    PickedProcessDescriptor :=  ReadyProcesses.PickProcess();
+    CurrentProcessContext := ContextProcessByID(PickedProcessDescriptor^.PID);
 
     PickedProcessDescriptor.State := spRun;
 
@@ -270,35 +274,76 @@ begin
 
   if CurrentProcessContext^.Command = cIO then
   begin
-    if not IsIODeviceAvailable then
-    begin
-      ReleaseProcessorIfNeeded();
-      Exit;
-    end else
+    if IsIODeviceAvailable then
     begin
       IsIODeviceAvailable := false;
-    end;
+      CurrentProcessContext^.IODeviceCapturedByMe := true;
+      WriteToLog(Format('%s захватил устройство ввода/вывода', [CurrentProcessContext^.Name]));
+    end else if not CurrentProcessContext^.IODeviceCapturedByMe then
+    begin
+      if ProcessorTimeUnitLeft = 0 then
+      begin
+        ReleaseProcessor;
+        ReadyProcesses.Add(Processor.Run);
+        WriteToLog(Format('%s помещен в очередь готовых', [CurrentProcessContext^.Name]));
+      end;
+      RefreshUI(Form1);
+      Exit;
+    end
   end;
 
   CurrentProcessContext^.CurrentRun := CurrentProcessContext^.CurrentRun + 1;
 
-  SwitchToNextCommandGroupIfNeeded();
-  ReleaseProcessorIfNeeded();
-
-  if CurrentProcessContext^.Command <> cNone then
+  if IsCurrentProcessExecuted then
   begin
-    In_Stack(Readys, Processor.Run);
-  end;
+    ReleaseProcessor;                       
 
+    if CurrentProcessContext^.IODeviceCapturedByMe then
+    begin
+      IsIODeviceAvailable := true;
+      CurrentProcessContext^.IODeviceCapturedByMe := false;
+      WriteToLog(Format('%s освободил устройство ввода/вывода', [CurrentProcessContext^.Name]));
+    end;
+    WriteToLog(Format('%s выполнился', [CurrentProcessContext^.Name]));
+  end
+  else
+  begin
+    if IsCurrentCommandGroupExecuted then
+    begin
+      SwitchToNextCommandGroup;
+
+      if (CurrentProcessContext^.IODeviceCapturedByMe)
+        and (CurrentProcessContext^.Command <> cIO) then
+      begin
+        IsIODeviceAvailable := true;
+        CurrentProcessContext^.IODeviceCapturedByMe := false;
+        WriteToLog(Format('%s освободил устройство ввода/вывода', [CurrentProcessContext^.Name]));
+      end;
+    end;
+
+    if ProcessorTimeUnitLeft = 0 then
+    begin
+      ReleaseProcessor;
+      ReadyProcesses.Add(Processor.Run);
+      WriteToLog(Format('%s помещен в очередь готовых', [CurrentProcessContext^.Name]));
+    end;
+  end;
+  
   RefreshUI(Form1);
-end;                  
+end;
 
-procedure SwitchToNextCommandGroupIfNeeded();
+function IsCurrentProcessExecuted: boolean;
+var
+  NextCommand: TCommand;
 begin
-  if CurrentProcessContext^.CurrentRun = CurrentProcessContext^.CountRun then
-  begin
-    SwitchToNextCommandGroup();
-  end;
+  NextCommand := ParseCommand(ListBox[Processor.Run^.PID].Items[CurrentProcessContext^.CommandLine + 1]);
+  Result := (NextCommand = cNone)
+    and (CurrentProcessContext^.CountRun = CurrentProcessContext^.CurrentRun);
+end;
+
+function IsCurrentCommandGroupExecuted: boolean;
+begin
+  Result := CurrentProcessContext^.CountRun = CurrentProcessContext^.CurrentRun;
 end;
 
 procedure SwitchToNextCommandGroup();
@@ -306,221 +351,43 @@ begin
   CurrentProcessContext^.CommandLine := CurrentProcessContext^.CommandLine + 1;
   CurrentProcessContext^.Command := ParseCommand(ListBox[Processor.Run^.PID].Items[CurrentProcessContext^.CommandLine]);
   CurrentProcessContext^.CountRun := ParseInt(ListBox[Processor.Run^.PID].Items[CurrentProcessContext^.CommandLine]);
-  CurrentProcessContext^.CurrentRun := 0;  
+  CurrentProcessContext^.CurrentRun := 0;
 end;
 
-procedure ReleaseProcessorIfNeeded();
+procedure ReleaseProcessor();
 begin
-  if ProcessorTimeUnitLeft = 0 then
-  begin
-    Processor.State := spEmpty;
-    Processor.Run^.State := spRun;
-  end;
+  Processor.State := spEmpty;
+  Processor.Run^.State := spReady;
 end;
 
 procedure RefreshUI(Form: TForm1);
+var
+  CurrentDescriptor: PDescriptor;
+  CurrentContext: PContext;
+  i: integer;
 begin
-  with Form do
+  Form.Label5.Caption := 'Состояние = ' + StateProcessorToStr(Processor.State);
+
+  if Processor.State = spEmpty then
   begin
-    Label7.Caption := Format('Выполняется %d из %d',
+    Form.Label7.Caption := 'Выполняется: - из -';
+    Form.Label6.Caption := 'Процесс: -';
+  end
+  else
+  begin
+    Form.Label7.Caption := Format('Выполняется: %d из %d',
       [CurrentProcessContext^.CurrentRun,
       CurrentProcessContext^.CountRun]);
+    Form.Label6.Caption := Format('Процесс: %s', [CurrentProcessContext^.Name]);
   end;
-end;
 
-//Моделирование диспетчера
-{procedure TForm1.Timer1Timer(Sender: TObject);
-var
-  CurrentContext: PContext;
-begin
-  //Если процессор свободен, занимаем его следующим из очереди готовых
-  if Processor.State = spEmpty then begin
-    if StateReadys = ssEmpty then exit;
-    //Изымаем следующий процесс из очереди готовых
-    Out_Stack(Readys, Processor.Run);
-    Processor.State := spBusy;
-    Label5.Caption := 'Состояние = ' + StateProcessorToStr(Processor.State);
-    CurrentContext := ContextProcessByID(Processor.Run^.PID);
-    Label6.Caption := 'Процесс = ' + CurrentContext^.Name;
-    //ListBox1.Items.Delete(Processor.Run^.PID);
-    refreshRredysList(ListBox1);
-    Processor.Run.State := spRun;
-    ALabel[1,Processor.Run^.PID].Caption := 'Состояние = ' + StateToStr(Processor.Run^.State);
-    ALabel[3,Processor.Run^.PID].Caption := 'Текущая команда = ' + CommandToStr(CurrentContext^.Command);
-    WriteToLog('Процесс ' + CurrentContext^.Name + ' переведен в состояние ВЫПОЛНЕНИЕ');
-    if ListBox1.Items.Count = 0 then StateReadys := ssEmpty;
-    //Если предыдущая команда выполнена
-    if CurrentContext^.CountRun = CurrentContext^.CurrentRun then begin
-      //Переходим на следующую команду
-      CurrentContext^.CommandLine := CurrentContext^.CommandLine + 1;
-      CurrentContext^.Command := ParseCommand(ListBox[Processor.Run^.PID].Items[CurrentContext^.CommandLine]);
-      CurrentContext^.CountRun := ParseInt(ListBox[Processor.Run^.PID].Items[CurrentContext^.CommandLine]);
-      CurrentContext^.CurrentRun := 0;
-      Label7.Caption := 'Выполняется ' + IntToStr(CurrentContext^.CurrentRun) + ' из ' + IntToStr(CurrentContext^.CountRun);
-      ALabel[1,Processor.Run^.PID].Caption := 'Состояние = ' + StateToStr(Processor.Run^.State);
-      ALabel[3,Processor.Run^.PID].Caption := 'Текущая команда = ' + CommandToStr(CurrentContext^.Command);
-      //Если команда ПРОЦЕССОР, то продолжаем работать,
-      if CurrentContext^.Command = cPROCESSOR then begin
-      end;
-      //Если команда ВВОД/ВЫВОД, то перемещаем процесс в очередь ожидающих
-      if CurrentContext^.Command = cIO then begin
-        In_Stack(Waits, Processor.Run);
-        StateWaits := ssFully;
-        //ListBox1.Items.Insert(CurrentContext^.PID, CurrentContext^.Name);
-        //ListBox2.Items.Add(CurrentContext^.Name);
-        refreshRredysList(ListBox1);
-        refreshWaitsList(ListBox2);
-        Processor.Run^.State := spWait;
-        WriteToLog('Процесс ' + CurrentContext^.Name + ' помещен в очередь ожидающих');
-        ALabel[1,Processor.Run^.PID].Caption := 'Состояние = ' + StateToStr(Processor.Run^.State);
-        ALabel[3,Processor.Run^.PID].Caption := 'Текущая команда = '  + CommandToStr(CurrentContext^.Command);
-        //Процессор свободен
-        Processor.State := spEmpty;
-        Label5.Caption := 'Состояние = ' + StateProcessorToStr(Processor.State);
-        Label6.Caption := 'Процесс = -';
-        Label7.Caption := 'Выполняется -  из -';
-      end;
-      //Если команды нет, то заканчиваем процесс
-      if CurrentContext^.Command = cNONE then begin
-        Processor.Run^.State := spNone;
-        WriteToLog('Процесс ' + CurrentContext^.Name + ' завершен');
-        ALabel[1,Processor.Run^.PID].Caption := 'Состояние = ' + StateToStr(Processor.Run^.State);
-        ALabel[3,Processor.Run^.PID].Caption := 'Текущая команда = '  + CommandToStr(CurrentContext^.Command);
-        //Процессор свободен
-        Processor.State := spEmpty;
-        Label5.Caption := 'Состояние = ' + StateProcessorToStr(Processor.State);
-        Label6.Caption := 'Процесс = -';
-        Label7.Caption := 'Выполняется -  из -';
-      end;
-    end;
-  end
-  else begin
-    //Если процессор занять какой-то работой
-    CurrentContext := ContextProcessByID(Processor.Run^.PID);
-    //Если он занять нужной работой, то определяем не закончилось ли время для выполнения команды
-    if CurrentContext^.Command = cPROCESSOR then begin
-      CurrentContext^.CurrentRun := CurrentContext^.CurrentRun + 1;
-      //Если процессор потребил квант или закончила выполняться команда или в очереди
-      //готовых процессов появился процесс с приоритетом выше чем текущий
-      if CurrentContext^.CurrentRun mod Processor.Run^.Kvant = 0 then begin
-        //То переводим процесс в очредь готовых
-        In_Stack(Readys, Processor.Run);
-        StateReadys := ssFully;
-        //ListBox1.Items.Add(CurrentContext^.Name);
-        //ListBox1.Items.Insert(Processor.Run^.PID, CurrentContext^.Name);
-        refreshRredysList(ListBox1);
-
-        WriteToLog('Процесс ' + CurrentContext^.Name + ' помещен в очередь готовых');
-        Processor.Run^.State := spReady;
-        ALabel[1,Processor.Run^.PID].Caption := 'Состояние = ' + StateToStr(Processor.Run^.State);
-        ALabel[3,Processor.Run^.PID].Caption := 'Текущая команда = -';
-        //Процессор свободен
-        //По правилам необходимо выбрать следующий процесс из очереди готовых, но
-        //для лучшей иллюстрации работы процессора, сделаем это на следующем кванте
-        Processor.State := spEmpty;
-        Label5.Caption := 'Состояние = ' + StateProcessorToStr(Processor.State);
-        Label6.Caption := 'Процесс = -';
-        Label7.Caption := 'Выполняется -  из -';
-      end
-      else begin
-        //Если нет, то смотрим отведенный квант
-        Label7.Caption := 'Выполняется ' + IntToStr(CurrentContext^.CurrentRun) + ' из ' + IntToStr(CurrentContext^.CountRun);
-      end;
-    end
-    else begin
-    end;
-  end;
-end;
-}
-//процедура обновлени списка готовых процессов
-procedure refreshRredysList(ListBox: TListBox);
-var
-  i: integer;
-  ProcessDescriptorList: PDescriptorStack;
-  ProcessContext: PContext;
-begin
-  //очищаем список
-  ListBox.Items.Clear;
-
-  //если список готовых процессов пуст, то
-  if Readys = nil then
+  Form.ListBox1.Clear;
+  for i := 0 to ReadyProcesses.Count - 1 do
   begin
-    //выходим из процедуры
-    exit;
+    CurrentDescriptor := ReadyProcesses[i];
+    CurrentContext := Form.ContextProcessByID(CurrentDescriptor^.PID);
+    Form.ListBox1.Items.Add(CurrentContext^.Name);
   end;
-  //иначе добавляем имя каждого процесса из очереди готовых в список
-  ProcessDescriptorList := Readys;
-  ProcessContext := Form1.ContextProcessByID(ProcessDescriptorList^.Descriptor^.PID);
-  ListBox.Items.Add(ProcessContext^.Name);
-  while ProcessDescriptorList^.Next <> nil do
-  begin
-    ProcessDescriptorList := ProcessDescriptorList^.Next;
-    ProcessContext := Form1.ContextProcessByID(ProcessDescriptorList^.Descriptor^.PID);
-    ListBox.Items.Add(ProcessContext^.Name);
-  end;
-end;
-//процедура обновлени списка ожидающих процессов
-procedure refreshWaitsList(ListBox: TListBox);
-var
-  i: integer;
-  ProcessDescriptorList: PDescriptorStack;
-  ProcessContext: PContext;
-begin
-  //очищаем список
-  ListBox.Items.Clear;
-
-  //если список готовых процессов пуст, то
-  if Waits = nil then
-  begin
-    //выходим из процедуры
-    exit;
-  end;
-
-  //иначе добавляем имя каждого процесса из очереди ожидающих процессов в список
-  ProcessDescriptorList := Waits;
-  ProcessContext := Form1.ContextProcessByID(ProcessDescriptorList^.Descriptor^.PID);
-  ListBox.Items.Add(ProcessContext^.Name);
-  while ProcessDescriptorList^.Next <> nil do
-  begin
-    ProcessDescriptorList := ProcessDescriptorList^.Next;
-    ProcessContext := Form1.ContextProcessByID(ProcessDescriptorList^.Descriptor^.PID);
-    ListBox.Items.Add(ProcessContext^.Name);
-  end;
-end;
-
-//функция для проверки существования процесса с приоритетои выше приоритета текущего процесса
-function isProcessWithHighesPriorityExists(Priority: TPrioritetProcess): boolean;
-var
-  ProcessDescriptorList: PDescriptorStack;
-begin
-  //если очередь готовых процессов пуста значит
-  if Readys = nil then
-  begin
-    //не существует процесса с приоритетом выше текущего
-    Result := false;
-    exit;
-  end;
-
-  //иначе берем каждый процесс
-  ProcessDescriptorList := Readys;
-  if ProcessDescriptorList^.Descriptor^.Prioritet > Priority then
-    begin
-      Result := true;
-      exit;
-    end;
-
-  while ProcessDescriptorList^.Next <> nil do
-  begin
-    ProcessDescriptorList := ProcessDescriptorList^.Next;
-    //и проверяем не имеет ли он больший приоритет чем текущий
-    if ProcessDescriptorList^.Descriptor^.Prioritet > Priority then
-    begin
-      Result := true;
-      exit;
-    end;
-  end;
-
-  Result := false;
 end;
 
 //Определение контекста процесса по идентификатору этого процесса
@@ -536,57 +403,4 @@ begin
    end;
    Result := nil;
 end;
-
-//Моделирование устройств ввода/вывода
-procedure TForm1.Timer2Timer(Sender: TObject);
-var
-  CurrentContext: PContext;
-begin
-  //Если устройство ничем не занято, то пытаемся его занять
-  if IODevice.State = spEmpty then begin
-    //Если список ожидающих операции ввода/вывода пуст, то ничего не делаем
-    if StateWaits = ssEmpty then exit;
-    //Изымаем следующий процесс из очереди ожидающих
-    Out_Stack(Waits, IODevice.Run);
-    IODevice.State := spBusy;
-    CurrentContext := ContextProcessByID(IODevice.Run^.PID);
-    //ListBox2.Items.Delete(0);
-    refreshWaitsList(ListBox2);
-    IODevice.Run.State := spRun;
-    ALabel[1,IODevice.Run^.PID].Caption := 'Состояние = ' + StateToStr(IODevice.Run^.State);
-    ALabel[3,IODevice.Run^.PID].Caption := 'Текущая команда = ' + CommandToStr(CurrentContext^.Command);
-    WriteToLog('Процесс ' + CurrentContext^.Name + ' осуществляет операции ввода/вывода');
-    if ListBox2.Items.Count = 0 then StateWaits := ssEmpty;
-  end
-  else begin
-    //Если устройство занято какой-то работой
-    CurrentContext := ContextProcessByID(IODevice.Run^.PID);
-    //Если он занять нужной работой, то определяем не закончилось ли время для выполнения команды
-    if CurrentContext^.Command = cIO then begin
-      CurrentContext^.CurrentRun := CurrentContext^.CurrentRun + 1;
-      //Если команда исчерпала время
-      if CurrentContext^.CountRun = CurrentContext^.CurrentRun then begin
-        //ТО переводим процесс в очредь готовых
-        In_Stack(Readys, IODevice.Run);
-        StateReadys := ssFully;
-        //ListBox1.Items.Add(CurrentContext^.Name);
-        refreshRredysList(ListBox1);
-        WriteToLog('Процесс ' + CurrentContext^.Name + ' помещен в очередь готовых');
-        IODevice.Run^.State := spReady;
-        ALabel[1,IODevice.Run^.PID].Caption := 'Состояние = ' + StateToStr(IODevice.Run^.State);
-        ALabel[3,IODevice.Run^.PID].Caption := 'Текущая команда = -';
-        //Устройство свободно и можно получать следующее задание
-        IODevice.State := spEmpty;
-        WriteToLog('Устройство ввода/вывода свободно');
-      end;
-    end;
-  end;
-end;
-
-procedure TForm1.FormCreate(Sender: TObject);
-begin
-  //это нужно для того, чтобы знать где кончается очередь
-  Readys := nil;
-end;
-
 end.

@@ -1,6 +1,6 @@
 object Form1: TForm1
-  Left = 607
-  Top = 146
+  Left = 529
+  Top = 154
   Width = 696
   Height = 586
   Caption = #1052#1086#1076#1077#1083#1080#1088#1086#1074#1072#1085#1080#1077' '#1072#1083#1075#1086#1088#1080#1090#1084#1086#1074' '#1091#1087#1088#1072#1074#1083#1077#1085#1080#1103' '#1087#1088#1086#1094#1077#1089#1089#1072#1084#1080
@@ -12,7 +12,6 @@ object Form1: TForm1
   Font.Style = []
   OldCreateOrder = False
   OnActivate = FormActivate
-  OnCreate = FormCreate
   PixelsPerInch = 96
   TextHeight = 13
   object Button1: TButton
@@ -180,7 +179,6 @@ object Form1: TForm1
   end
   object Timer2: TTimer
     Enabled = False
-    OnTimer = Timer2Timer
     Left = 144
     Top = 224
   end

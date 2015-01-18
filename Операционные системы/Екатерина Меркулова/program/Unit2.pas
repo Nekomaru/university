@@ -2,7 +2,7 @@ unit Unit2;
 {$Optimization off}
 interface
 uses
-  SysUtils;
+  SysUtils, Classes;
 
 type
   //Тип-перечисление: Тип команды
@@ -105,29 +105,29 @@ type
 
 implementation
 
-	function TReadyQueue.pick: PDescriptor;
+	function TReadyQueue.PickProcess: PDescriptor;
 	var
 		CurrentDescriptor: PDescriptor;
 		CurrentDescriptorWithMaxPriority: PDescriptor;
 		i: integer;
 	begin
-		CurrentDescriptorWithMaxPriority := queue[0];
-		for i := 1 to queue.Count - 1 do
+		CurrentDescriptorWithMaxPriority := Self[0];
+		for i := 1 to Count - 1 do
 		begin
-			CurrentDescriptor := queue[i];
+			CurrentDescriptor := Self[i];
 			if CurrentDescriptor^.Prioritet > CurrentDescriptorWithMaxPriority^.Prioritet then
 			begin
 				CurrentDescriptorWithMaxPriority := CurrentDescriptor;
 			end;
 		end;
 		
-		queue.Remove(CurrentDescriptorWithMaxPriority);
+    Remove(CurrentDescriptorWithMaxPriority);
 		Result := CurrentDescriptorWithMaxPriority;
 	end;
 	
-	function IsEmpty: boolean;
+	function TReadyQueue.IsEmpty: boolean;
 	begin
-		Result := Count > 0;
+		Result := Count = 0;
 	end;
 	
   procedure In_Stack(var First: PDescriptorStack; AValue: PDescriptor);
