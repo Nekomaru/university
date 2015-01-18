@@ -56,31 +56,20 @@ var
   ALabel: array [0..3, 0..9] of TLabel;
   Process: array [0..9] of TProcess;        //Массив процессов
   Processor: TProcessor;                    //Модель процессора
-  ReadyProcesses: TReadyQueue;
+  ReadyProcesses: TReadyQueue;              //Очередь готовых процессов
+  WaitProcesses: TList;              //Очередь ждущих процессов
 
 procedure ReleaseProcessor();
 procedure SwitchToNextCommandGroup();
 procedure RefreshUI(Form: TForm1);
 function IsCurrentProcessExecuted: boolean;
 function IsCurrentCommandGroupExecuted: boolean;
+procedure MakeWaitProcessesReady;
 
 implementation
 
 {$R *.dfm}
 {$Optimization Off}
-
-//генерирует случайный приоритет
-function generateRandomPrority: TPrioritetProcess;
-begin
-  randomize;
-  case Random(5) of
-    0: Result := ppLowest;
-    1: Result := ppLow;
-    2: Result := ppNormal;
-    3: Result := ppHigh;
-    4: Result := ppHighest;
-  end;
-end;
 
 //Создание процесса:
 //ID - идентификационный номер процесса
@@ -96,7 +85,7 @@ begin
     PID := ID;
     Kvant := 2;
     State := spNone;
-    Prioritet := generateRandomPrority;
+    Prioritet := ppNormal;
   end;
   New(Result.Context);
   Result.Context^.PID := ID;
@@ -191,6 +180,9 @@ begin
   IsIODeviceAvailable := true;
   ReadyProcesses := TReadyQueue.Create;
   WriteToLog('Очередь готовых процессов создана');
+
+  WaitProcesses := TList.Create;
+  WriteToLog('Очередь ожидающих процессов создана');
 end;
 
 //Уменьшение кванта процессорного времени, если это возможно
@@ -296,14 +288,11 @@ begin
       WriteToLog(Format('%s захватил устройство ввода/вывода', [CurrentProcessContext^.Name]));
     end else if not CurrentProcessContext^.IODeviceCapturedByMe then
     begin
-      //иначе проверяем не кончилось ли время работы
-      if ProcessorTimeUnitLeft = 0 then
-      begin
-        //снимаем процесс с выполнения если кончилось
-        ReleaseProcessor;
-        ReadyProcesses.Add(Processor.Run);
-        WriteToLog(Format('%s помещен в очередь готовых', [CurrentProcessContext^.Name]));
-      end;
+      //иначе снимаем процесс с выполнения
+      ReleaseProcessor;
+      //и помещаем процесс в очередь ждущих процессов
+      WaitProcesses.Add(Processor.Run);
+      WriteToLog(Format('%s помещен в очередь ждущих процессов', [CurrentProcessContext^.Name]));
       RefreshUI(Form1);
       Exit;
     end
@@ -325,6 +314,8 @@ begin
       IsIODeviceAvailable := true;
       CurrentProcessContext^.IODeviceCapturedByMe := false;
       WriteToLog(Format('%s освободил устройство ввода/вывода', [CurrentProcessContext^.Name]));
+      //и делаем все ожидающие процессы готовыми
+      MakeWaitProcessesReady;
     end;
     WriteToLog(Format('%s выполнился', [CurrentProcessContext^.Name]));
   end
@@ -336,7 +327,7 @@ begin
       //переходим на следующую группу
       SwitchToNextCommandGroup;
 
-      //если этим процессом захвачено устройства ввода/вывода и следующая группа
+      //если этим процессом захвачено устройство ввода/вывода и следующая группа
       //команд - команды не ввода/вывода
       if (CurrentProcessContext^.IODeviceCapturedByMe)
         and (CurrentProcessContext^.Command <> cIO) then
@@ -345,6 +336,8 @@ begin
         IsIODeviceAvailable := true;
         CurrentProcessContext^.IODeviceCapturedByMe := false;
         WriteToLog(Format('%s освободил устройство ввода/вывода', [CurrentProcessContext^.Name]));
+        //и делаем все ожидающие процессы готовыми
+        MakeWaitProcessesReady;
       end;
     end;
 
@@ -395,6 +388,20 @@ begin
   Processor.Run^.State := spReady;
 end;
 
+procedure MakeWaitProcessesReady;
+var
+  CurrentWaitProcessDescriptor: PDescriptor;
+  i: integer;
+begin
+  for i := 0 to WaitProcesses.Count - 1 do
+  begin
+    CurrentWaitProcessDescriptor := WaitProcesses[i];
+    ReadyProcesses.Add(CurrentWaitProcessDescriptor);
+  end;
+
+  WaitProcesses.Clear;
+end;
+
 //обновляет интерфейс
 procedure RefreshUI(Form: TForm1);
 var
@@ -423,6 +430,14 @@ begin
     CurrentDescriptor := ReadyProcesses[i];
     CurrentContext := Form.ContextProcessByID(CurrentDescriptor^.PID);
     Form.ListBox1.Items.Add(CurrentContext^.Name);
+  end;
+
+  Form.ListBox2.Clear;
+  for i := 0 to WaitProcesses.Count - 1 do
+  begin
+    CurrentDescriptor := WaitProcesses[i];
+    CurrentContext := Form.ContextProcessByID(CurrentDescriptor^.PID);
+    Form.ListBox2.Items.Add(CurrentContext^.Name);
   end;
 end;
 

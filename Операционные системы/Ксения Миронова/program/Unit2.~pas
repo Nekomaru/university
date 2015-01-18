@@ -107,11 +107,11 @@ type
 implementation
 
 	function TReadyQueue.PickProcess: PDescriptor;
-  var
+	var
     PickedDescriptor: PDescriptor;
 	begin
     PickedDescriptor := First;
-    Delete(PickedDescriptor);
+    Delete(0);
     Result := PickedDescriptor;
 	end;
 	
