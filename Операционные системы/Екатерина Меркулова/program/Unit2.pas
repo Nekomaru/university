@@ -72,6 +72,12 @@ type
     State: TStateProcessor;                      //Состояние процессора
   end;
 
+	TReadyQueue = class(TList)
+	public
+		function PickProcess: PDescriptor;
+		function IsEmpty: boolean;
+	end;
+
   //Процедура помещения в стек
   procedure In_Stack(var First: PDescriptorStack; AValue: PDescriptor);
   //Процедура извлечения из стека
@@ -99,6 +105,31 @@ type
 
 implementation
 
+	function TReadyQueue.pick: PDescriptor;
+	var
+		CurrentDescriptor: PDescriptor;
+		CurrentDescriptorWithMaxPriority: PDescriptor;
+		i: integer;
+	begin
+		CurrentDescriptorWithMaxPriority := queue[0];
+		for i := 1 to queue.Count - 1 do
+		begin
+			CurrentDescriptor := queue[i];
+			if CurrentDescriptor^.Prioritet > CurrentDescriptorWithMaxPriority^.Prioritet then
+			begin
+				CurrentDescriptorWithMaxPriority := CurrentDescriptor;
+			end;
+		end;
+		
+		queue.Remove(CurrentDescriptorWithMaxPriority);
+		Result := CurrentDescriptorWithMaxPriority;
+	end;
+	
+	function IsEmpty: boolean;
+	begin
+		Result := Count > 0;
+	end;
+	
   procedure In_Stack(var First: PDescriptorStack; AValue: PDescriptor);
   var
     Temp: PDescriptorStack;
