@@ -149,7 +149,6 @@ begin
                '; Приоритет = ' + PriorToStr(Process[PageControl1.PageCount-1].Descriptor.Prioritet) + ')');
     Panel3.Enabled := True;
     //Помещаем процесс в стек готовых
-    //Readys := nil;
     In_Stack(Readys, @Process[PageControl1.ActivePageIndex].Descriptor);
     StateReadys := ssFully;
     //ListBox1.Items.Add(Process[PageControl1.ActivePageIndex].Context^.Name);
