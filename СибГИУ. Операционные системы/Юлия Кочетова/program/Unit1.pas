@@ -312,122 +312,6 @@ end;
 procedure TForm1.Timer1Timer(Sender: TObject);
 var
   PickedProcessDescriptor: PDescriptor;
-{begin
-  //если процессор простаивает
-  if Processor.State = spEmpty then
-  begin
-    //если очередь готовых процессов пуста
-    if ReadyProcesses.IsEmpty then
-    begin
-      //то ничего не делаем
-      Exit;
-    end;
-
-    //берем процесс из очереди готовых процессов
-    PickedProcessDescriptor :=  ReadyProcesses.PickProcess();
-
-    //восстанавливаем контекст выбранного процесса
-    CurrentProcessContext := ContextProcessByID(PickedProcessDescriptor^.PID);
-
-    //помечаем, что процесс выполняется
-    PickedProcessDescriptor.State := spRun;
-
-    //помечаем, что процессор находится в работе
-    Processor.Run := PickedProcessDescriptor;
-    Processor.State := spBusy;
-
-    //инициализируем переменную с оставшимся временем работы процесса
-    ProcessorTimeUnitLeft := PickedProcessDescriptor^.Kvant;
-  end;
-
-  //уменьшаем время, которое осталось выполняться процессу на единицу
-  ProcessorTimeUnitLeft := ProcessorTimeUnitLeft - 1;
-
-  //если команду, которую нужно сейчас выполнить команда ввода/вывода
-  if CurrentProcessContext^.Command = cIO then
-  begin
-    //если устройство ввода/вывода не захвачено другими процессами
-    if IsIODeviceAvailable then
-    begin
-      //захватываем его
-      IsIODeviceAvailable := false;
-      CurrentProcessContext^.IODeviceCapturedByMe := true;
-      WriteToLog(Format('%s захватил устройство ввода/вывода', [CurrentProcessContext^.Name]));
-    end else if not CurrentProcessContext^.IODeviceCapturedByMe then
-    begin
-      //иначе проверяем не кончилось ли время работы
-      if ProcessorTimeUnitLeft = 0 then
-      begin
-        //снимаем процесс с выполнения если кончилось
-        ReleaseProcessor;
-        ReadyProcesses.Add(Processor.Run);
-        WriteToLog(Format('%s помещен в очередь готовых', [CurrentProcessContext^.Name]));
-      end;
-      RefreshUI(Form1);
-      Exit;
-    end
-  end;
-
-  //увеличиваем кол-во выполненных команд на единицу
-  CurrentProcessContext^.CurrentRun := CurrentProcessContext^.CurrentRun + 1;
-
-  //если процесс полность выполнился
-  if IsCurrentProcessExecuted then
-  begin
-    //освобождаем процессор
-    ReleaseProcessor;
-
-    //удаляем его дескриптор из списка активных
-    ActiveProcessesDescriptors.Remove(Processor.Run);
-
-    refreshActiveProcessesPriorities;
-
-    //если этим процессом захвачено устройство ввода/вывода
-    if CurrentProcessContext^.IODeviceCapturedByMe then
-    begin
-      //то освобождаем его
-      IsIODeviceAvailable := true;
-      CurrentProcessContext^.IODeviceCapturedByMe := false;
-      WriteToLog(Format('%s освободил устройство ввода/вывода', [CurrentProcessContext^.Name]));
-    end;
-    WriteToLog(Format('%s выполнился', [CurrentProcessContext^.Name]));
-  end
-  else
-  begin
-    //если группа команд выполнена
-    if IsCurrentCommandGroupExecuted then
-    begin
-      //переходим на следующую группу
-      SwitchToNextCommandGroup;
-
-      //если этим процессом захвачено устройства ввода/вывода и следующая группа
-      //команд - команды не ввода/вывода
-      if (CurrentProcessContext^.IODeviceCapturedByMe)
-        and (CurrentProcessContext^.Command <> cIO) then
-      begin
-        //то освобождаем устройство
-        IsIODeviceAvailable := true;
-        CurrentProcessContext^.IODeviceCapturedByMe := false;
-        WriteToLog(Format('%s освободил устройство ввода/вывода', [CurrentProcessContext^.Name]));
-      end;
-    end;
-
-    //если время работы процесса кончилось или в очереди готовы процессов
-    //появился процесс с приоритетом выше тем у текущего
-    if (ProcessorTimeUnitLeft = 0)
-        or (IsProcessWithHighestPriorityExist) then
-    begin
-      //снимаем процесс с выполнения
-      ReleaseProcessor;
-      ReadyProcesses.Add(Processor.Run);
-      WriteToLog(Format('%s помещен в очередь готовых', [CurrentProcessContext^.Name]));
-    end;
-  end;
-
-  //обновляем интерфейс
-  RefreshUI(Form1);
-end;}
-
 begin
   //если процессор простаивает
   if Processor.State = spEmpty then
@@ -454,6 +338,9 @@ begin
 
     //инициализируем переменную с оставшимся временем работы процесса
     ProcessorTimeUnitLeft := PickedProcessDescriptor^.Kvant;
+
+    ALabel[1, PickedProcessDescriptor^.PID].Caption :=
+        'Состояние = ' + StateToStr(PickedProcessDescriptor^.State);
   end;
 
   //уменьшаем время, которое осталось выполняться процессу на единицу
@@ -590,6 +477,9 @@ begin
   CurrentProcessContext^.Command := ParseCommand(ListBox[Processor.Run^.PID].Items[CurrentProcessContext^.CommandLine]);
   CurrentProcessContext^.CountRun := ParseInt(ListBox[Processor.Run^.PID].Items[CurrentProcessContext^.CommandLine]);
   CurrentProcessContext^.CurrentRun := 0;
+
+  ALabel[3, CurrentProcessContext^.PID].Caption :=
+      'Текущая команда = ' + CommandToStr(CurrentProcessContext^.Command);
 end;
 
 //освобождает процессор
@@ -597,6 +487,8 @@ procedure ReleaseProcessor();
 begin
   Processor.State := spEmpty;
   Processor.Run^.State := spReady;
+  ALabel[1, Processor.Run^.PID].Caption :=
+        'Состояние = ' + StateToStr(Processor.Run^.State);
 end;
 
 //обновляет интерфейс
