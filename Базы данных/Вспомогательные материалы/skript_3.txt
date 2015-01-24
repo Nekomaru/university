@@ -1,0 +1,81 @@
+create table table1 (
+rabotnik varchar(10) not null,
+usluga varchar (15) not null,
+stoimost integer,
+vremya_okazaniya_uslugi integer);
+
+alter table table1 add constraint pk1 primary key (rabotnik, usluga);
+
+alter table table1 add check(stoimost>=0);
+alter table table1 add check(vremya_okazaniya_uslugi>=0);
+
+
+create table table2 (
+rabotnik varchar(10) not null,
+den_raboty varchar(15));
+
+alter table table2 add constraint pk2 primary key (rabotnik);
+
+
+create table table3 (
+den_raboty varchar(15)
+vremya_raboty_s integer
+vremya_raboty_do integer);
+
+alter table table3 add constraint pk3 primary key (den_raboty);
+
+alter table table3 add constraint check(vremya_raboty_s>=0);
+alter table table3 add constraint check(vremya_raboty_do>=0);
+
+
+
+alter table table1 add fk1 foreign key (rabotnik) references table2 (rabotnik);
+alter table table2 add fk1 foreign key (den_raboty) references table3 (den_raboty);
+
+
+
+insert into table3
+	values('ponedelnik', 10, 14);
+insert into table3
+	values('sreda', 12, 16);
+insert into table3
+	values('pyatnica', 14, 18);
+
+
+insert into table2
+	values('Nikitina', 'ponedelnik');
+insert into table2
+	values('Zhahalova', 'sreda');
+insert into table2
+	values('Karataeva', 'pyatnica');
+
+
+insert into table1
+	values('Nikitina', 'strizhka', 800, 30);
+insert into table1
+	values('Nikitina', 'pokraska', 1000, 60);
+insert into table1
+	values('Zhahalova', 'milirovanie', 900, 60);
+insert into table1
+	values('Zhahalova', 'strizhka', 600, 20);
+insert into table1
+	values('Karataeva', 'manikur', 500, 30);
+
+
+create trigger vremya_raboty for table3
+	active before insert
+	as
+	begin
+		if 
+			( new.vremya_raboty_s>new.vremya_raboty_do) then
+			new.vremya_raboty_do = new.vremya_raboty_s;
+	end;
+
+create trigger vremya_raboty_update for table3
+	active before update
+	as
+	begin
+		if 
+			( new.vremya_raboty_s>new.vremya_raboty_do) then
+			new.vremya_raboty_do = new.vremya_raboty_s;
+	end;
