@@ -1,7 +1,7 @@
 object MainForm: TMainForm
-  Left = 328
+  Left = 297
   Height = 364
-  Top = 270
+  Top = 259
   Width = 595
   Caption = 'Результаты ГИА по математике'
   ClientHeight = 364

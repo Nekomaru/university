@@ -128,7 +128,7 @@ begin
           scoreSum := scoreSum + currentStudentScore;
      end;
 
-     averageScore := scoreSum / 10.0;
+     averageScore := scoreSum / studentCount;
      resultTemplate := 'Минимальный балл: %d' + sLineBreak +
                     'Максимальный балл: %d' + sLineBreak +
                     'Средний балл: %.2f';
