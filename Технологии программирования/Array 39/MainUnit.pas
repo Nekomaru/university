@@ -1,0 +1,134 @@
+unit MainUnit;
+
+interface
+
+uses
+  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  Dialogs, StdCtrls;
+
+type
+  TMainForm = class(TForm)
+    ArrayLabel: TLabel;
+    ArrayEdit: TEdit;
+    RunButton: TButton;
+    ResultLabel: TLabel;
+    procedure RunButtonClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+  private
+    { Private declarations }
+  public
+    { Public declarations }
+  end;
+
+  TSeqType = (UNDEFINED, INCREASING, DECREASING);
+
+var
+  MainForm: TMainForm;
+
+implementation
+
+{$R *.dfm}
+
+procedure TMainForm.RunButtonClick(Sender: TObject);
+var
+  StringList: TStringList;              //объект для преобразования строки в массив
+  i: integer;                           //итератор
+  curSequenceLength: integer;           //длина текущий последовательности
+  sequenceCount: integer;               //кол-во последовательностей
+  curElement, prevElement: real;        //текущий и предыдущий элемент соответственно
+  isCurSequenceEnd: boolean;            //показывает закончилась ли последовательность
+  curSequenceType: TSeqType;            //тип текущей последовательности
+begin
+  //изначально тип последовательности неизвестен
+  curSequenceType := UNDEFINED;
+  //изначально последовательность не считается законченной
+  isCurSequenceEnd := false;
+  //изначально найдено 0 монотонных последовательностей
+  sequenceCount := 0;
+  //начальная длина первой "последовательности" равна 1
+  curSequenceLength := 1;
+
+  //создаем объект, с помощью которого будем из введенной строки делать массив
+  StringList := TStringList.Create;
+
+  //указываем разделяющий символ
+  StringList.Delimiter := ' ';
+  //указываем строку, которую нужно поделить
+  StringList.DelimitedText := ArrayEdit.Text;
+
+  //берем индекс каждого элемента, кроме 0
+  for i := 1 to StringList.Count - 1 do
+  begin
+    //сохраняем в отдельную переменную текущий элемент
+    curElement := StrToFloat(StringList[i]);
+    //сохраняем в отдельную переменную предыдущий элемент
+    prevElement := StrToFloat(StringList[i - 1]);
+
+    //если тип текущей последовательности не определен, то пытаемся определить его
+    if curSequenceType = UNDEFINED then
+    begin
+      //если текущий элемент больше предыдущего
+      if curElement > prevElement then
+      begin
+        //то последовательность монотонно возрастает
+        curSequenceType := INCREASING;
+      end
+      //если текущий элемент меньше предыдущего
+      else if curElement < prevElement then
+      begin
+        //то последовательность монотонно убывает
+        curSequenceType := DECREASING;
+      end;
+        
+      //увеличиваем длину последовательности
+      curSequenceLength := curSequenceLength + 1;
+      //помечаем последовательность законченной если текущий элемент - последний элемент
+      isCurSequenceEnd := i = StringList.Count - 1;
+    end
+    //иначе
+    else
+    begin
+      //проверяем не нарушает ли текущий элемент текущую последовательность
+      if  ((curSequenceType = INCREASING) and (curElement < prevElement)) or
+          ((curSequenceType = DECREASING) and (curElement > prevElement)) then
+      begin
+        isCurSequenceEnd := true;
+      end
+      else
+      begin
+        //если нет то увеличиваем длину последовательности
+        curSequenceLength := curSequenceLength + 1;
+      end;
+      //если текущий элемент последний, то также считаем последовательность законченной
+      isCurSequenceEnd := isCurSequenceEnd or (i = StringList.Count - 1);
+    end;
+
+    //если текущая последовательность закончилась
+    if isCurSequenceEnd then
+    begin
+      //если длина текущей последовательности больше 1
+      if curSequenceLength > 1 then
+      begin
+        //то ее действительно считаем ее последовательностью
+        //и увеличиваем кол-во найденных последовательностей
+        sequenceCount := sequenceCount + 1;
+      end;
+      //длина следующей "последовательности" изначально будет равна 1
+      curSequenceLength := 1;
+      //изначально последовательность считается незаконченной
+      isCurSequenceEnd := false;
+      //изначально тип последовательности не определен
+      curSequenceType := UNDEFINED;
+    end;
+  end;
+  //выводим кол-во найденных последовательностей
+  ResultLabel.Caption := FloatToStr(sequenceCount);
+end;
+
+procedure TMainForm.FormCreate(Sender: TObject);
+begin
+  //Инициализируем поле ввода
+  ArrayEdit.Text := '2 1 0,5 0,3 -1,2 3 7,4 3,3';
+end;
+
+end.
